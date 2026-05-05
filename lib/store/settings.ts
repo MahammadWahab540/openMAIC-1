@@ -336,8 +336,8 @@ const getDefaultProvidersConfig = (): ProvidersConfig => {
 
 // Initialize default audio config
 const getDefaultAudioConfig = () => ({
-  ttsProviderId: 'browser-native-tts' as TTSProviderId,
-  ttsVoice: 'default',
+  ttsProviderId: 'kokoro-web-tts' as TTSProviderId,
+  ttsVoice: 'af_heart',
   ttsSpeed: 1.0,
   asrProviderId: 'browser-native' as ASRProviderId,
   asrLanguage: 'zh',
@@ -356,10 +356,17 @@ const getDefaultAudioConfig = () => ({
     'doubao-tts': { apiKey: '', baseUrl: '', enabled: false },
     'elevenlabs-tts': { apiKey: '', baseUrl: '', enabled: false },
     'minimax-tts': { apiKey: '', baseUrl: '', modelId: 'speech-2.8-hd', enabled: false },
+    'kokoro-web-tts': {
+      apiKey: '',
+      baseUrl: '',
+      modelId: 'onnx-community/Kokoro-82M-v1.0-ONNX',
+      enabled: true,
+      providerOptions: { generateDuringSceneGeneration: false },
+    },
     'browser-native-tts': { apiKey: '', baseUrl: '', enabled: true },
   } as Record<
     TTSProviderId,
-    { apiKey: string; baseUrl: string; modelId?: string; enabled: boolean }
+    { apiKey: string; baseUrl: string; modelId?: string; enabled: boolean; providerOptions?: Record<string, unknown> }
   >,
   asrProvidersConfig: {
     'openai-whisper': { apiKey: '', baseUrl: '', enabled: true },
@@ -943,8 +950,8 @@ export const useSettingsStore = create<SettingsState>()(
             return {
               ttsProvidersConfig: rest as typeof state.ttsProvidersConfig,
               ...(state.ttsProviderId === id && {
-                ttsProviderId: 'browser-native-tts' as TTSProviderId,
-                ttsVoice: 'default',
+                ttsProviderId: 'kokoro-web-tts' as TTSProviderId,
+                ttsVoice: 'af_heart',
               }),
             };
           }),
@@ -1214,7 +1221,7 @@ export const useSettingsStore = create<SettingsState>()(
                 state.ttsProviderId,
                 newTTSConfig,
                 ttsFallback,
-                'browser-native-tts' as TTSProviderId,
+                'kokoro-web-tts' as TTSProviderId,
               );
               const validASRProvider = validateProvider(
                 state.asrProviderId,

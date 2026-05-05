@@ -210,12 +210,17 @@ export async function generateTTSForClassroom(
   const audioDir = path.join(CLASSROOMS_DIR, classroomId, 'audio');
   await ensureDir(audioDir);
 
-  // Resolve TTS provider (exclude browser-native-tts)
+  // Resolve TTS provider (exclude browser-native-tts and kokoro-web-tts since
+  // both must be handled client-side). When the only configured provider is
+  // browser- or Kokoro-based, server-side TTS is skipped without failing the
+  // classroom generation — the audio is generated in the browser instead.
   const ttsProviderIds = Object.keys(getServerTTSProviders()).filter(
-    (id) => id !== 'browser-native-tts',
+    (id) => id !== 'browser-native-tts' && id !== 'kokoro-web-tts',
   );
   if (ttsProviderIds.length === 0) {
-    log.warn('No server TTS provider configured, skipping TTS generation');
+    log.info(
+      'No server TTS provider configured (Kokoro Web TTS audio is generated client-side); skipping server-side TTS generation',
+    );
     return;
   }
 

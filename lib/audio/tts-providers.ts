@@ -169,6 +169,11 @@ export async function generateTTS(
         'Browser Native TTS must be handled client-side using Web Speech API. This provider cannot be used on the server.',
       );
 
+    case 'kokoro-web-tts':
+      throw new Error(
+        'Kokoro Web TTS must be handled client-side via WebGPU/WASM. This provider cannot be used on the server.',
+      );
+
     default:
       if (isCustomTTSProvider(config.providerId)) {
         return await generateOpenAITTS(config, text);

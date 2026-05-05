@@ -11,6 +11,7 @@ import type { Scene } from '@/lib/types/stage';
 import type { SpeechAction } from '@/lib/types/action';
 import { splitLongSpeechActions } from '@/lib/audio/tts-utils';
 import { getVoxCPMProviderOptions } from '@/lib/audio/voxcpm-voices';
+import { generateKokoroAudio } from '@/lib/hooks/use-kokoro-tts';
 import { generateMediaForOutlines } from '@/lib/media/media-orchestrator';
 import { createLogger } from '@/lib/logger';
 
@@ -135,6 +136,25 @@ export async function generateAndStoreTTS(
 ): Promise<void> {
   const settings = useSettingsStore.getState();
   if (settings.ttsProviderId === 'browser-native-tts') return;
+
+  // Kokoro Web TTS — generate locally in the browser via the worker.
+  if (settings.ttsProviderId === 'kokoro-web-tts') {
+    const ttsProviderConfig = settings.ttsProvidersConfig?.['kokoro-web-tts'];
+    const blob = await generateKokoroAudio(text, {
+      voice: settings.ttsVoice || 'af_heart',
+      speed: settings.ttsSpeed ?? 1.0,
+      modelId: ttsProviderConfig?.modelId,
+      audioId,
+      useCache: false,
+    });
+    await db.audioFiles.put({
+      id: audioId,
+      blob,
+      format: 'wav',
+      createdAt: Date.now(),
+    });
+    return;
+  }
 
   const ttsProviderConfig = settings.ttsProvidersConfig?.[settings.ttsProviderId];
   const providerOptions =
@@ -393,7 +413,19 @@ export function useSceneGenerator(options: UseSceneGeneratorOptions = {}) {
             const settings = useSettingsStore.getState();
 
             // TTS generation — failure means the whole scene fails
-            if (settings.ttsEnabled && settings.ttsProviderId !== 'browser-native-tts') {
+            // For Kokoro Web TTS, only generate during scene generation when
+            // explicitly opted in (model download + inference is heavy on
+            // lower-end devices). When opted out, audio is generated lazily
+            // on first playback by the playback engine / on-demand resolver.
+            const kokoroEager =
+              settings.ttsProviderId === 'kokoro-web-tts' &&
+              !!settings.ttsProvidersConfig?.['kokoro-web-tts']?.providerOptions
+                ?.generateDuringSceneGeneration;
+            const shouldGenerateTTS =
+              settings.ttsEnabled &&
+              settings.ttsProviderId !== 'browser-native-tts' &&
+              (settings.ttsProviderId !== 'kokoro-web-tts' || kokoroEager);
+            if (shouldGenerateTTS) {
               const ttsResult = await generateTTSForScene(
                 scene,
                 params.languageDirective || params.stageInfo.language,
@@ -404,11 +436,30 @@ export function useSceneGenerator(options: UseSceneGeneratorOptions = {}) {
                   pausedByFailureOrAbort = true;
                   break;
                 }
-                store.getState().addFailedOutline(outline);
-                options.onSceneFailed?.(outline, ttsResult.error || 'TTS generation failed');
-                store.getState().setGenerationStatus('paused');
-                pausedByFailureOrAbort = true;
-                break;
+                // For Kokoro Web TTS, do not fail the scene — audio can be
+                // (re)generated on demand during playback.
+                if (settings.ttsProviderId !== 'kokoro-web-tts') {
+                  store.getState().addFailedOutline(outline);
+                  options.onSceneFailed?.(outline, ttsResult.error || 'TTS generation failed');
+                  store.getState().setGenerationStatus('paused');
+                  pausedByFailureOrAbort = true;
+                  break;
+                } else {
+                  log.warn('Kokoro TTS pre-generation failed; will generate on demand:', ttsResult.error);
+                }
+              }
+            } else if (
+              settings.ttsEnabled &&
+              settings.ttsProviderId === 'kokoro-web-tts'
+            ) {
+              // Pre-assign audioIds so on-demand generation can find them later.
+              const providerId = settings.ttsProviderId;
+              scene.actions = splitLongSpeechActions(scene.actions || [], providerId);
+              const sceneOrder = scene.order;
+              for (const action of scene.actions) {
+                if (action.type === 'speech' && (action as SpeechAction).text) {
+                  (action as SpeechAction).audioId = `tts_s${sceneOrder}_${action.id}`;
+                }
               }
             }
 
@@ -544,15 +595,35 @@ export function useSceneGenerator(options: UseSceneGeneratorOptions = {}) {
 
         // Step 3: TTS
         const settings = useSettingsStore.getState();
-        if (settings.ttsEnabled && settings.ttsProviderId !== 'browser-native-tts') {
+        const kokoroEager =
+          settings.ttsProviderId === 'kokoro-web-tts' &&
+          !!settings.ttsProvidersConfig?.['kokoro-web-tts']?.providerOptions
+            ?.generateDuringSceneGeneration;
+        const shouldGenerateTTS =
+          settings.ttsEnabled &&
+          settings.ttsProviderId !== 'browser-native-tts' &&
+          (settings.ttsProviderId !== 'kokoro-web-tts' || kokoroEager);
+        if (shouldGenerateTTS) {
           const ttsResult = await generateTTSForScene(
             actionsResult.scene,
             params.languageDirective || params.stageInfo.language,
             signal,
           );
-          if (!ttsResult.success) {
+          if (!ttsResult.success && settings.ttsProviderId !== 'kokoro-web-tts') {
             store.getState().addFailedOutline(outline);
             return;
+          }
+        } else if (settings.ttsEnabled && settings.ttsProviderId === 'kokoro-web-tts') {
+          const providerId = settings.ttsProviderId;
+          actionsResult.scene.actions = splitLongSpeechActions(
+            actionsResult.scene.actions || [],
+            providerId,
+          );
+          const sceneOrder = actionsResult.scene.order;
+          for (const action of actionsResult.scene.actions) {
+            if (action.type === 'speech' && (action as SpeechAction).text) {
+              (action as SpeechAction).audioId = `tts_s${sceneOrder}_${action.id}`;
+            }
           }
         }
 

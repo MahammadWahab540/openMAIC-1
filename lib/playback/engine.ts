@@ -494,7 +494,7 @@ export class PlaybackEngine {
           .play(speechAction.audioId || '', speechAction.audioUrl)
           .then((audioStarted) => {
             if (!audioStarted) {
-              // No pre-generated audio — try browser-native TTS if selected
+              // No pre-generated audio — try browser-native TTS or Kokoro on demand
               const settings = useSettingsStore.getState();
               if (
                 settings.ttsEnabled &&
@@ -503,6 +503,15 @@ export class PlaybackEngine {
                 window.speechSynthesis
               ) {
                 this.playBrowserTTS(speechAction);
+              } else if (
+                settings.ttsEnabled &&
+                settings.ttsProviderId === 'kokoro-web-tts' &&
+                typeof window !== 'undefined'
+              ) {
+                this.playKokoroTTS(speechAction).catch((err) => {
+                  log.warn('Kokoro on-demand TTS failed; falling back to reading timer:', err);
+                  scheduleReadingTimer();
+                });
               } else {
                 scheduleReadingTimer();
               }
@@ -740,6 +749,42 @@ export class PlaybackEngine {
       this.browserTTSChunkIndex = 0;
       this.browserTTSPausedChunks = [];
       window.speechSynthesis?.cancel();
+    }
+  }
+
+  // ==================== Kokoro Web TTS (on-demand) ====================
+
+  /**
+   * Generate Kokoro audio on demand and play it via the audio element.
+   * Used when scene generation skipped TTS pre-generation (the default for
+   * Kokoro Web TTS to keep generation fast on lower-end devices).
+   */
+  private async playKokoroTTS(speechAction: SpeechAction): Promise<void> {
+    const { generateKokoroAudio } = await import('@/lib/hooks/use-kokoro-tts');
+    const settings = useSettingsStore.getState();
+    const providerConfig = settings.ttsProvidersConfig?.['kokoro-web-tts'];
+    const audioId = speechAction.audioId;
+
+    const blob = await generateKokoroAudio(speechAction.text, {
+      voice: settings.ttsVoice || 'af_heart',
+      speed: settings.ttsSpeed ?? 1.0,
+      modelId: providerConfig?.modelId,
+      audioId,
+      useCache: true,
+    });
+
+    if (this.mode !== 'playing') return;
+    if (audioId) {
+      // generateKokoroAudio already wrote to IndexedDB under the audioId.
+      const started = await this.audioPlayer.play(audioId);
+      if (!started) {
+        // Fall back to direct blob play if IndexedDB read failed.
+        const url = URL.createObjectURL(blob);
+        await this.audioPlayer.play('', url);
+      }
+    } else {
+      const url = URL.createObjectURL(blob);
+      await this.audioPlayer.play('', url);
     }
   }
 }

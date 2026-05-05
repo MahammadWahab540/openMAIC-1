@@ -757,8 +757,47 @@ function GenerationPreviewContent() {
         throw new Error(data.error || t('generation.sceneGenerateFailed'));
       }
 
-      // Generate TTS for first scene (part of actions step — blocking)
-      if (settings.ttsEnabled && settings.ttsProviderId !== 'browser-native-tts') {
+      // Generate TTS for first scene (part of actions step — blocking).
+      // Browser-native TTS plays at runtime; Kokoro Web TTS is generated
+      // lazily on first playback (or eagerly during scene generation when
+      // the user has opted in via settings). Skip server-side generation for
+      // those providers here.
+      const kokoroEager =
+        settings.ttsProviderId === 'kokoro-web-tts' &&
+        !!settings.ttsProvidersConfig?.['kokoro-web-tts']?.providerOptions
+          ?.generateDuringSceneGeneration;
+      const shouldServerGenerateTTS =
+        settings.ttsEnabled &&
+        settings.ttsProviderId !== 'browser-native-tts' &&
+        settings.ttsProviderId !== 'kokoro-web-tts';
+      if (settings.ttsEnabled && settings.ttsProviderId === 'kokoro-web-tts') {
+        // Pre-assign audioIds so playback / on-demand generation can find them.
+        const speechActions = (data.scene.actions || []).filter(
+          (a: { type: string; text?: string }) => a.type === 'speech' && a.text,
+        );
+        for (const action of speechActions) {
+          (action as { audioId?: string }).audioId = `tts_${action.id}`;
+        }
+        if (kokoroEager) {
+          // Eager Kokoro generation in the browser.
+          const { generateKokoroAudio } = await import('@/lib/hooks/use-kokoro-tts');
+          const kokoroConfig = settings.ttsProvidersConfig?.['kokoro-web-tts'];
+          for (const action of speechActions) {
+            try {
+              await generateKokoroAudio((action as { text: string }).text, {
+                voice: settings.ttsVoice || 'af_heart',
+                speed: settings.ttsSpeed ?? 1.0,
+                modelId: kokoroConfig?.modelId,
+                audioId: (action as { audioId?: string }).audioId,
+                useCache: false,
+              });
+            } catch (err) {
+              log.warn('[Kokoro] Eager pre-generation failed; will retry on playback:', err);
+            }
+          }
+        }
+      }
+      if (shouldServerGenerateTTS) {
         const ttsProviderConfig = settings.ttsProvidersConfig?.[settings.ttsProviderId];
         const providerOptions =
           settings.ttsProviderId === 'voxcpm-tts'

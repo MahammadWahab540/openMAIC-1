@@ -9,6 +9,7 @@ import {
   type ResolvedVoice,
 } from '@/lib/audio/voice-resolver';
 import { getVoxCPMProviderOptions, useVoxCPMVoiceProfiles } from '@/lib/audio/voxcpm-voices';
+import { generateKokoroAudio } from '@/lib/hooks/use-kokoro-tts';
 import type { AgentConfig } from '@/lib/orchestration/registry/types';
 import type { TTSProviderId } from '@/lib/audio/types';
 import type { AudioIndicatorState } from '@/components/roundtable/audio-indicator';
@@ -141,6 +142,60 @@ export function useDiscussionTTS({ enabled, agents, onAudioStateChange }: Discus
       currentProviderRef.current = item.providerId;
       onAudioStateChangeRef.current?.(item.agentId, 'playing');
       browserSpeakRef.current(item.text, item.voiceId);
+      return;
+    }
+
+    // Kokoro Web TTS — generate locally in the browser via a Worker
+    if (item.providerId === 'kokoro-web-tts') {
+      currentProviderRef.current = item.providerId;
+      onAudioStateChangeRef.current?.(item.agentId, 'generating');
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
+      try {
+        const providerConfig = ttsProvidersConfig['kokoro-web-tts'];
+        const blob = await generateKokoroAudio(item.text, {
+          voice: item.voiceId,
+          speed: ttsSpeed,
+          modelId: item.modelId || providerConfig?.modelId,
+          useCache: true,
+        });
+        if (controller.signal.aborted) return;
+        const url = URL.createObjectURL(blob);
+        const audio = new Audio(url);
+        audio.playbackRate = playbackSpeed;
+        audio.volume = ttsMuted ? 0 : ttsVolume;
+        audioRef.current = audio;
+        const cleanup = () => {
+          URL.revokeObjectURL(url);
+          audioRef.current = null;
+          isPlayingRef.current = false;
+          segmentDoneCounterRef.current++;
+          onAudioStateChangeRef.current?.(item.agentId, 'idle');
+          if (!pausedRef.current) {
+            queueMicrotask(() => processQueueRef.current());
+          }
+        };
+        audio.addEventListener('ended', cleanup);
+        audio.addEventListener('error', cleanup);
+        if (pausedRef.current) {
+          onAudioStateChangeRef.current?.(item.agentId, 'playing');
+          audio.pause();
+          return;
+        }
+        onAudioStateChangeRef.current?.(item.agentId, 'playing');
+        await audio.play();
+      } catch (err) {
+        if ((err as Error).name !== 'AbortError') {
+          console.error('[DiscussionTTS] Kokoro TTS failed:', err);
+        }
+        audioRef.current = null;
+        isPlayingRef.current = false;
+        segmentDoneCounterRef.current++;
+        onAudioStateChangeRef.current?.(item.agentId, 'idle');
+        if (!pausedRef.current) {
+          queueMicrotask(() => processQueueRef.current());
+        }
+      }
       return;
     }
 

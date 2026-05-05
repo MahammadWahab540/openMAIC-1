@@ -928,6 +928,28 @@ export const TTS_PROVIDERS: Record<BuiltInTTSProviderId, TTSProviderConfig> = {
     speedRange: { min: 0.7, max: 1.2, default: 1.0 },
   },
 
+  'kokoro-web-tts': {
+    id: 'kokoro-web-tts',
+    name: 'Kokoro Web TTS',
+    requiresApiKey: false,
+    icon: '/logos/browser.svg',
+    models: [{ id: 'onnx-community/Kokoro-82M-v1.0-ONNX', name: 'Kokoro 82M ONNX' }],
+    defaultModelId: 'onnx-community/Kokoro-82M-v1.0-ONNX',
+    voices: [
+      { id: 'af_heart', name: 'Heart (Female, US)', language: 'en-US', gender: 'female' },
+      { id: 'af_bella', name: 'Bella (Female, US)', language: 'en-US', gender: 'female' },
+      { id: 'af_nicole', name: 'Nicole (Female, US)', language: 'en-US', gender: 'female' },
+      { id: 'am_adam', name: 'Adam (Male, US)', language: 'en-US', gender: 'male' },
+      { id: 'am_michael', name: 'Michael (Male, US)', language: 'en-US', gender: 'male' },
+      { id: 'bf_emma', name: 'Emma (Female, UK)', language: 'en-GB', gender: 'female' },
+      { id: 'bf_isabella', name: 'Isabella (Female, UK)', language: 'en-GB', gender: 'female' },
+      { id: 'bm_george', name: 'George (Male, UK)', language: 'en-GB', gender: 'male' },
+      { id: 'bm_lewis', name: 'Lewis (Male, UK)', language: 'en-GB', gender: 'male' },
+    ],
+    supportedFormats: ['wav'],
+    speedRange: { min: 0.5, max: 2.0, default: 1.0 },
+  },
+
   'browser-native-tts': {
     id: 'browser-native-tts',
     name: '浏览器原生 (Web Speech API)',
@@ -1157,6 +1179,7 @@ export const DEFAULT_TTS_VOICES: Record<BuiltInTTSProviderId, string> = {
   'doubao-tts': 'zh_female_vv_uranus_bigtts',
   'elevenlabs-tts': 'EXAVITQu4vr4xnSDxMaL',
   'minimax-tts': 'female-yujie',
+  'kokoro-web-tts': 'af_heart',
   'browser-native-tts': 'default',
 };
 
@@ -1169,6 +1192,7 @@ export const DEFAULT_TTS_MODELS: Record<BuiltInTTSProviderId, string> = {
   'doubao-tts': '',
   'elevenlabs-tts': 'eleven_multilingual_v2',
   'minimax-tts': 'speech-2.8-hd',
+  'kokoro-web-tts': 'onnx-community/Kokoro-82M-v1.0-ONNX',
   'browser-native-tts': '',
 };
 

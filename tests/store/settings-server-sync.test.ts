@@ -74,6 +74,16 @@ vi.mock('@/lib/audio/constants', () => ({
       supportedFormats: ['browser'],
       speedRange: { min: 0.1, max: 10, default: 1 },
     },
+    'kokoro-web-tts': {
+      id: 'kokoro-web-tts',
+      name: 'Kokoro Web TTS',
+      requiresApiKey: false,
+      defaultModelId: 'onnx-community/Kokoro-82M-v1.0-ONNX',
+      models: [{ id: 'onnx-community/Kokoro-82M-v1.0-ONNX', name: 'Kokoro 82M ONNX' }],
+      voices: [{ id: 'af_heart', name: 'Heart', language: 'en-US', gender: 'female' }],
+      supportedFormats: ['wav'],
+      speedRange: { min: 0.5, max: 2, default: 1 },
+    },
   },
   ASR_PROVIDERS: {
     'openai-whisper': {
@@ -97,6 +107,7 @@ vi.mock('@/lib/audio/constants', () => ({
   },
   DEFAULT_TTS_VOICES: {
     'openai-tts': 'alloy',
+    'kokoro-web-tts': 'af_heart',
     'browser-native-tts': 'default',
   },
 }));
@@ -546,7 +557,7 @@ describe('fetchServerProviders — TTS stale selection', () => {
     return useSettingsStore;
   }
 
-  it('falls back to browser-native-tts when selected TTS provider loses server config', async () => {
+  it('falls back to kokoro-web-tts when selected TTS provider loses server config', async () => {
     const store = await getStore();
 
     mockServerResponse({ tts: { 'openai-tts': {} } });
@@ -557,7 +568,7 @@ describe('fetchServerProviders — TTS stale selection', () => {
     mockServerResponse({});
     await store.getState().fetchServerProviders();
 
-    expect(store.getState().ttsProviderId).toBe('browser-native-tts');
+    expect(store.getState().ttsProviderId).toBe('kokoro-web-tts');
   });
 
   it('falls back to remaining server TTS provider when selected one is removed', async () => {

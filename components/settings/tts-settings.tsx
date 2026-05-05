@@ -48,6 +48,7 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { createLogger } from '@/lib/logger';
 import { useTTSPreview } from '@/lib/audio/use-tts-preview';
+import { useKokoroTTS } from '@/lib/hooks/use-kokoro-tts';
 import { isCustomTTSProvider } from '@/lib/audio/types';
 import {
   getVoxCPMProviderOptions,
@@ -89,6 +90,7 @@ export function TTSSettings({ selectedProviderId }: TTSSettingsProps) {
   const providerConfig = ttsProvidersConfig[selectedProviderId];
   const isServerConfigured = !!providerConfig?.isServerConfigured;
   const isVoxCPM = selectedProviderId === 'voxcpm-tts';
+  const isKokoroWeb = selectedProviderId === 'kokoro-web-tts';
   const voxcpmBackend = normalizeVoxCPMBackend(providerConfig?.providerOptions?.backend);
   const requiresApiKey = isCustom
     ? !!providerConfig?.requiresApiKey
@@ -225,7 +227,8 @@ export function TTSSettings({ selectedProviderId }: TTSSettingsProps) {
       )}
 
       {/* API Key & Base URL */}
-      {(requiresApiKey || isServerConfigured || isCustom || isVoxCPM) &&
+      {!isKokoroWeb &&
+        (requiresApiKey || isServerConfigured || isCustom || isVoxCPM) &&
         (isVoxCPM ? (
           <div className="rounded-lg border border-border/60 bg-background px-3 py-2.5">
             <div className="flex flex-col gap-2 md:flex-row md:items-end">
@@ -448,6 +451,8 @@ export function TTSSettings({ selectedProviderId }: TTSSettingsProps) {
             )}
           </>
         ))}
+
+      {isKokoroWeb && <KokoroWebPanel />}
 
       {/* Test TTS */}
       <div className="space-y-2">
@@ -1103,6 +1108,88 @@ function VoxCPMVoiceManager() {
           </section>
         </div>
       </div>
+    </div>
+  );
+}
+
+function KokoroWebPanel() {
+  const { t } = useI18n();
+  const ttsProvidersConfig = useSettingsStore((state) => state.ttsProvidersConfig);
+  const setTTSProviderConfig = useSettingsStore((state) => state.setTTSProviderConfig);
+  const config = ttsProvidersConfig['kokoro-web-tts'];
+  const generateDuringSceneGeneration =
+    !!config?.providerOptions?.generateDuringSceneGeneration;
+
+  // Lazy-imported in the file header at runtime; this panel only renders when
+  // Kokoro Web TTS is the selected provider so the worker is only spawned on
+  // demand.
+  const { status, device, error, preload } = useKokoroTTS();
+
+  const statusLabel =
+    status === 'loading'
+      ? t('settings.kokoroLoading')
+      : status === 'ready'
+        ? t('settings.kokoroReady')
+        : status === 'generating'
+          ? t('settings.kokoroGenerating')
+          : status === 'error'
+            ? t('settings.kokoroError')
+            : t('settings.kokoroIdle');
+
+  return (
+    <div className="space-y-3 rounded-lg border border-border/60 bg-background p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="space-y-1">
+          <Label className="text-sm font-semibold">{t('settings.kokoroPanelTitle')}</Label>
+          <p className="text-xs text-muted-foreground">{t('settings.kokoroFirstLoadHint')}</p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            preload().catch(() => {
+              /* error already surfaced via hook */
+            });
+          }}
+          disabled={status === 'loading' || status === 'ready'}
+          data-testid="kokoro-preload-btn"
+        >
+          {status === 'loading' ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <Volume2 className="h-3.5 w-3.5" />
+          )}
+          {t('settings.kokoroPreload')}
+        </Button>
+      </div>
+      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+        <span className="rounded-md border border-border/50 bg-muted/30 px-2 py-1">
+          {t('settings.kokoroStatus')}: <span className="font-medium text-foreground">{statusLabel}</span>
+        </span>
+        <span className="rounded-md border border-border/50 bg-muted/30 px-2 py-1">
+          {t('settings.kokoroDevice')}: <span className="font-medium text-foreground">{device ? device.toUpperCase() : '—'}</span>
+        </span>
+      </div>
+      {error && (
+        <p className="text-xs text-red-600 dark:text-red-400" data-testid="kokoro-error-message">{error}</p>
+      )}
+      <label className="flex items-start gap-2 text-xs text-foreground/80">
+        <input
+          type="checkbox"
+          className="mt-0.5"
+          checked={generateDuringSceneGeneration}
+          onChange={(e) =>
+            setTTSProviderConfig('kokoro-web-tts', {
+              providerOptions: {
+                ...(config?.providerOptions || {}),
+                generateDuringSceneGeneration: e.target.checked,
+              },
+            })
+          }
+          data-testid="kokoro-eager-toggle"
+        />
+        <span>{t('settings.kokoroEagerToggle')}</span>
+      </label>
     </div>
   );
 }

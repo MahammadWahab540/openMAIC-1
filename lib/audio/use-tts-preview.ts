@@ -92,6 +92,37 @@ export function useTTSPreview() {
           return;
         }
 
+        // Kokoro Web TTS — generate locally via worker
+        if (options.providerId === 'kokoro-web-tts') {
+          const { generateKokoroAudio } = await import('@/lib/hooks/use-kokoro-tts');
+          const blob = await generateKokoroAudio(options.text, {
+            voice: options.voice,
+            speed: options.speed,
+            modelId: options.modelId,
+            useCache: true,
+          });
+          if (isStale()) return;
+          if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
+          const url = URL.createObjectURL(blob);
+          audioUrlRef.current = url;
+          const audio = new Audio(url);
+          audioRef.current = audio;
+          audio.onended = () => {
+            if (!isStale()) {
+              audioRef.current = null;
+              setPreviewing(false);
+            }
+          };
+          audio.onerror = () => {
+            if (!isStale()) {
+              audioRef.current = null;
+              setPreviewing(false);
+            }
+          };
+          await audio.play();
+          return;
+        }
+
         // API-based TTS
         const body: Record<string, unknown> = {
           text: options.text,

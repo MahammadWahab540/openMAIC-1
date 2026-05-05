@@ -218,6 +218,26 @@ docker compose up --build
 
 Set `PDF_MINERU_BASE_URL` (and `PDF_MINERU_API_KEY` if needed) in `.env.local`.
 
+### Default: Kokoro Web TTS (Local, No API Key)
+
+OpenMAIC ships with **Kokoro Web TTS** as the default text-to-speech provider.
+It runs locally in your browser via WebGPU (or WASM as a fallback) and
+**requires no API key**. The model is downloaded once (~80 MB) and cached by
+the browser; subsequent generations are instant and never leave the device.
+
+- **No setup required.** Open the app, the default `kokoro-web-tts` provider
+  uses the `af_heart` voice out of the box.
+- **9 built-in voices** (US/UK English, multiple genders) plus any voices
+  Kokoro exposes at runtime.
+- **Audio is generated on demand** the first time a speech action plays, and
+  cached in IndexedDB so playback after a refresh is instant.
+- See [docs/kokoro-web-tts.md](docs/kokoro-web-tts.md) for architecture
+  details and the optional eager-generation toggle for higher-end devices.
+
+You can still configure server-based TTS providers (OpenAI, Azure, Qwen,
+GLM, ElevenLabs, MiniMax, Doubao, VoxCPM2, …) in **Settings →
+Text-to-Speech**; Kokoro is just the no-API-key default.
+
 ### Optional: VoxCPM2 (Self-Hosted TTS with Voice Cloning)
 
 [VoxCPM2](https://github.com/OpenBMB/VoxCPM) is an open-source TTS model from OpenBMB with voice cloning. OpenMAIC ships an adapter; run VoxCPM on your own hardware and OpenMAIC will talk to it.

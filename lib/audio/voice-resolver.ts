@@ -133,6 +133,7 @@ export function getAvailableProvidersWithVoices(
     const isLocalVoxCPM =
       providerId === VOXCPM_TTS_PROVIDER_ID &&
       !!(providerConfig?.serverBaseUrl?.trim() || providerConfig?.baseUrl?.trim());
+    const isKokoroWeb = providerId === 'kokoro-web-tts';
     const visibleVoxCPMProfiles =
       providerId === VOXCPM_TTS_PROVIDER_ID
         ? voxcpmProfiles.filter((profile) => {
@@ -141,7 +142,7 @@ export function getAvailableProvidersWithVoices(
           })
         : [];
 
-    if (hasApiKey || isServerConfigured || isLocalVoxCPM) {
+    if (hasApiKey || isServerConfigured || isLocalVoxCPM || isKokoroWeb) {
       const allVoices = [
         ...config.voices.map((v) => ({
           id: v.id,

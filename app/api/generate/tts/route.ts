@@ -55,6 +55,15 @@ export async function POST(req: NextRequest) {
       return apiError('INVALID_REQUEST', 400, 'browser-native-tts must be handled client-side');
     }
 
+    // Reject Kokoro Web TTS — must be handled client-side via WebGPU/WASM
+    if (ttsProviderId === 'kokoro-web-tts') {
+      return apiError(
+        'INVALID_REQUEST',
+        400,
+        'kokoro-web-tts must be handled client-side unless KOKORO_SERVER_BASE_URL is configured.',
+      );
+    }
+
     const voxcpmVoicePrompt =
       typeof ttsProviderOptions?.voicePrompt === 'string' ? ttsProviderOptions.voicePrompt : '';
     if (

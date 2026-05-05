@@ -136,6 +136,32 @@ function AgentVoicePill({
         return;
       }
 
+      // Kokoro Web TTS — generate locally via Worker
+      if (providerId === 'kokoro-web-tts') {
+        try {
+          const { generateKokoroAudio } = await import('@/lib/hooks/use-kokoro-tts');
+          const blob = await generateKokoroAudio(previewText, {
+            voice: voiceId,
+            speed: 1,
+            modelId: modelId || ttsProvidersConfig['kokoro-web-tts']?.modelId,
+            useCache: true,
+          });
+          const url = URL.createObjectURL(blob);
+          const audio = new Audio(url);
+          previewAudioRef.current = audio;
+          const cleanup = () => {
+            URL.revokeObjectURL(url);
+            setPreviewingId(null);
+          };
+          audio.addEventListener('ended', cleanup);
+          audio.addEventListener('error', cleanup);
+          await audio.play();
+        } catch {
+          setPreviewingId(null);
+        }
+        return;
+      }
+
       // Server TTS
       try {
         const controller = new AbortController();
@@ -416,6 +442,32 @@ function TeacherVoicePill({
           // ignore abort
         }
         setPreviewingId(null);
+        return;
+      }
+
+      // Kokoro Web TTS — generate locally via Worker
+      if (providerId === 'kokoro-web-tts') {
+        try {
+          const { generateKokoroAudio } = await import('@/lib/hooks/use-kokoro-tts');
+          const blob = await generateKokoroAudio(previewText, {
+            voice: voiceId,
+            speed: 1,
+            modelId: modelId || ttsProvidersConfig['kokoro-web-tts']?.modelId,
+            useCache: true,
+          });
+          const url = URL.createObjectURL(blob);
+          const audio = new Audio(url);
+          previewAudioRef.current = audio;
+          const cleanup = () => {
+            URL.revokeObjectURL(url);
+            setPreviewingId(null);
+          };
+          audio.addEventListener('ended', cleanup);
+          audio.addEventListener('error', cleanup);
+          await audio.play();
+        } catch {
+          setPreviewingId(null);
+        }
         return;
       }
 
