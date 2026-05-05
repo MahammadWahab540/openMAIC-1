@@ -138,12 +138,13 @@ async function handleGenerate(input: Extract<KokoroWorkerInput, { type: 'generat
 
     // kokoro-js types `voice` as a literal union of known voice IDs. Our
     // worker accepts arbitrary voice strings (including ones from the runtime
-    // voice list), so cast through a permissive shape.
-    const streamFn = tts.stream as unknown as (
+    // voice list), so cast through a permissive shape. We invoke via an arrow
+    // wrapper so `this` stays bound to the KokoroTTS instance.
+    type StreamFn = (
       input: TextSplitterStream,
       opts: { voice: string; speed: number },
     ) => AsyncIterable<{ text: string; audio: { toBlob(): Blob } }>;
-    const stream = streamFn(splitter, { voice, speed });
+    const stream = (tts.stream as unknown as StreamFn).call(tts, splitter, { voice, speed });
 
     const collected: Blob[] = [];
     for await (const chunk of stream) {

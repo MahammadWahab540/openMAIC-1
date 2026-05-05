@@ -55,7 +55,9 @@ all existing providers as optional fallbacks.
 
 ## Acceptance criteria checklist
 - [x] Fresh install runs with no TTS API key (default Kokoro).
-- [x] Selecting Kokoro Web TTS loads the model in browser.
+- [x] Selecting Kokoro Web TTS loads the model in browser. **Smoke-tested in
+      headless Chrome: model downloaded, status went Idle → Ready, device
+      correctly detected as WASM (WebGPU unavailable in headless Chrome).**
 - [x] Teacher narration uses Kokoro on-demand.
 - [x] Discussion TTS uses Kokoro.
 - [x] Pause/resume/cancel work.
@@ -67,10 +69,24 @@ all existing providers as optional fallbacks.
 - [x] `pnpm test` passes (33 files / 268 tests).
 - [x] No `kokoro-js` import in server files.
 - [x] Server route does not crash when Kokoro is selected (returns
-      structured 400).
+      structured 400 — verified via curl).
 - [x] Settings UI shows model load state, device, preload button, and
       first-load warning.
+- [x] **End-to-end browser test: clicking "Test TTS" with the default
+      Kokoro voice runs WASM inference and shows "TTS test successful,
+      audio played" — model output is a valid WAV that the HTMLAudioElement
+      successfully plays.**
 - [x] Docs in `docs/kokoro-web-tts.md`; README TTS section updated.
+
+## Smoke-test bug found and fixed
+The first browser smoke test surfaced
+`Cannot read properties of undefined (reading '_validate_voice')` from
+`tts.stream(...)`. Root cause: I had assigned `tts.stream` to a local
+variable for type widening, which detached `this` from the KokoroTTS
+instance. Fix: invoke via `(tts.stream as ...).call(tts, ...)` so `this`
+stays bound. Verified by re-running the browser smoke test — TTS now
+generates and plays correctly.
+
 
 ## Backlog / future work
 - **P1**: Implement export preflight that scans speech actions, generates
