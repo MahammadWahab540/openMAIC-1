@@ -54,6 +54,7 @@ const LLM_ENV_MAP: Record<string, string> = {
   TENCENT_HUNYUAN: 'tencent-hunyuan',
   XIAOMI: 'xiaomi',
   MIMO: 'xiaomi',
+  MISTRAL: 'mistral',
   OLLAMA: 'ollama',
 };
 

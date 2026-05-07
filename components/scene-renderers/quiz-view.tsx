@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useI18n } from '@/lib/hooks/use-i18n';
+import { useUserProfileStore } from '@/lib/store/user-profile';
 import { getCurrentModelConfig } from '@/lib/utils/model-config';
 import { createLogger } from '@/lib/logger';
 
@@ -748,6 +749,31 @@ export function QuizView({ questions, sceneId }: QuizViewProps) {
       setResults(ordered);
       setPhase('reviewing');
       writeSubmittedResults(sceneId, ordered);
+
+      // Save progress to MongoDB
+      const userId = useUserProfileStore.getState().userId;
+      const classroomId = window.location.pathname.split('/').pop() || ''; // Simple way to get classroomId if params not easily accessible
+
+      if (userId && classroomId) {
+        const total = questions.reduce((sum, q) => sum + (q.points ?? 1), 0);
+        const score = ordered.reduce((sum, r) => sum + r.earned, 0);
+
+        fetch('/api/user-progress', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId,
+            classroomId,
+            completedScenes: [sceneId],
+            quizResult: {
+              sceneId,
+              score,
+              total,
+              answers,
+            },
+          }),
+        }).catch((err) => log.error('Failed to save quiz results to MongoDB:', err));
+      }
     })();
 
     return () => {

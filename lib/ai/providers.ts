@@ -26,6 +26,7 @@
 import { createOpenAI } from '@ai-sdk/openai';
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
+import { createMistral } from '@ai-sdk/mistral';
 import type { LanguageModel } from 'ai';
 import type {
   ProviderId,
@@ -323,6 +324,45 @@ export const PROVIDERS: Record<ProviderId, ProviderConfig> = {
             defaultEnabled: true,
           },
         },
+      },
+    ],
+  },
+
+  mistral: {
+    id: 'mistral',
+    name: 'Mistral',
+    type: 'mistral',
+    requiresApiKey: true,
+    defaultBaseUrl: 'https://api.mistral.ai/v1',
+    icon: '/logos/mistral.svg',
+    models: [
+      {
+        id: 'mistral-large-latest',
+        name: 'Mistral Large',
+        contextWindow: 128000,
+        outputWindow: 8192,
+        capabilities: { streaming: true, tools: true, vision: false },
+      },
+      {
+        id: 'mistral-medium-latest',
+        name: 'Mistral Medium',
+        contextWindow: 32000,
+        outputWindow: 8192,
+        capabilities: { streaming: true, tools: true, vision: false },
+      },
+      {
+        id: 'mistral-small-latest',
+        name: 'Mistral Small',
+        contextWindow: 32000,
+        outputWindow: 8192,
+        capabilities: { streaming: true, tools: true, vision: false },
+      },
+      {
+        id: 'pixtral-large-latest',
+        name: 'Pixtral Large',
+        contextWindow: 128000,
+        outputWindow: 8192,
+        capabilities: { streaming: true, tools: true, vision: true },
       },
     ],
   },
@@ -810,73 +850,55 @@ export const PROVIDERS: Record<ProviderId, ProviderConfig> = {
     icon: '/logos/grok.svg',
     models: [
       {
-        id: 'grok-4.20-reasoning',
-        name: 'Grok 4.20 Reasoning',
-        contextWindow: 2000000,
-        outputWindow: 131072,
-        capabilities: {
-          streaming: true,
-          tools: true,
-          vision: true,
-          thinking: {
-            toggleable: false,
-            budgetAdjustable: false,
-            defaultEnabled: true,
-          },
-        },
-      },
-      {
-        id: 'grok-4.20',
-        name: 'Grok 4.20',
-        contextWindow: 2000000,
-        outputWindow: 131072,
+        id: 'grok-beta',
+        name: 'Grok Beta',
+        contextWindow: 128000,
+        outputWindow: 4096,
         capabilities: { streaming: true, tools: true, vision: true },
       },
       {
-        id: 'grok-4.20-multi-agent',
-        name: 'Grok 4.20 Multi-Agent',
-        contextWindow: 2000000,
-        outputWindow: 131072,
-        capabilities: {
-          streaming: true,
-          tools: true,
-          vision: true,
-          thinking: {
-            toggleable: false,
-            budgetAdjustable: false,
-            defaultEnabled: true,
-          },
-        },
-      },
-      {
-        id: 'grok-4-1-fast-reasoning',
-        name: 'Grok 4.1 Fast Reasoning',
-        contextWindow: 2000000,
-        outputWindow: 131072,
-        capabilities: {
-          streaming: true,
-          tools: true,
-          vision: true,
-          thinking: {
-            toggleable: false,
-            budgetAdjustable: false,
-            defaultEnabled: true,
-          },
-        },
-      },
-      {
-        id: 'grok-4-1-fast-non-reasoning',
-        name: 'Grok 4.1 Fast',
-        contextWindow: 2000000,
-        outputWindow: 131072,
+        id: 'grok-2-1212',
+        name: 'Grok 2',
+        contextWindow: 128000,
+        outputWindow: 4096,
         capabilities: { streaming: true, tools: true, vision: true },
       },
+    ],
+  },
+  mistral: {
+    id: 'mistral',
+    name: 'Mistral',
+    type: 'mistral',
+    requiresApiKey: true,
+    icon: '/logos/mistral.svg',
+    models: [
       {
-        id: 'grok-code-fast-1',
-        name: 'Grok Code Fast',
-        contextWindow: 256000,
-        outputWindow: 32768,
+        id: 'mistral-large-latest',
+        name: 'Mistral Large',
+        contextWindow: 128000,
+        outputWindow: 4096,
         capabilities: { streaming: true, tools: true, vision: false },
+      },
+      {
+        id: 'mistral-medium-latest',
+        name: 'Mistral Medium',
+        contextWindow: 32000,
+        outputWindow: 4096,
+        capabilities: { streaming: true, tools: true, vision: false },
+      },
+      {
+        id: 'mistral-small-latest',
+        name: 'Mistral Small',
+        contextWindow: 32000,
+        outputWindow: 4096,
+        capabilities: { streaming: true, tools: true, vision: false },
+      },
+      {
+        id: 'pixtral-large-latest',
+        name: 'Pixtral Large',
+        contextWindow: 128000,
+        outputWindow: 4096,
+        capabilities: { streaming: true, tools: true, vision: true },
       },
     ],
   },
@@ -1183,19 +1205,51 @@ export function getModel(config: ModelConfig): ModelWithInfo {
     }
   }
 
+  // Vercel AI Gateway support
+  const gatewayId = (process.env.VERCEL_AI_GATEWAY_ID || process.env.NEXT_PUBLIC_VERCEL_AI_GATEWAY_ID)?.trim();
+  const gatewayApiKey = process.env.AI_GATEWAY_API_KEY;
+  const useGateway = !!(gatewayId && !config.baseUrl);
+
+  // Use provided API key, or fallback to gateway key, or empty string
+  let effectiveApiKey = config.apiKey || (useGateway ? gatewayApiKey : '') || '';
+
   // Validate API key if required
-  if (requiresApiKey && !config.apiKey) {
+  if (requiresApiKey && !effectiveApiKey) {
     throw new Error(`API key required for provider: ${config.providerId}`);
   }
 
-  // Use provided API key, or empty string for providers that don't require one
-  const effectiveApiKey = config.apiKey || '';
-
   // Resolve base URL: explicit > provider default > SDK default
-  const effectiveBaseUrl = normalizeMiniMaxAnthropicBaseUrl(
+  let effectiveBaseUrl = normalizeMiniMaxAnthropicBaseUrl(
     config.providerId,
     config.baseUrl || provider?.defaultBaseUrl || undefined,
   );
+
+  if (useGateway && gatewayApiKey) {
+    effectiveApiKey = gatewayApiKey;
+  }
+
+  const gatewayHeaders: Record<string, string> = gatewayId
+    ? {
+        'x-vercel-ai-gateway-id': gatewayId,
+      }
+    : {};
+
+  if (useGateway) {
+    // Vercel AI Gateway URL format: https://gateway.ai.vercel.com/v1/{gatewayId}/{providerId}
+    // Mapping internal provider IDs to Vercel AI Gateway provider names
+    const gatewayProviderMap: Record<string, string> = {
+      google: 'google-generative-ai',
+      openai: 'openai',
+      mistral: 'mistral',
+      groq: 'groq',
+    };
+    const gatewayProviderName = gatewayProviderMap[config.providerId] || config.providerId;
+    
+    effectiveBaseUrl = `https://gateway.ai.vercel.com/v1/${gatewayId}/${gatewayProviderName}`;
+    log.info(`Using Vercel AI Gateway for ${config.providerId}:${config.modelId} at ${effectiveBaseUrl}`);
+  } else {
+    log.info(`Using base URL ${effectiveBaseUrl} for ${config.providerId}:${config.modelId}`);
+  }
 
   let model: LanguageModel;
 
@@ -1204,6 +1258,7 @@ export function getModel(config: ModelConfig): ModelWithInfo {
       const openaiOptions: Parameters<typeof createOpenAI>[0] = {
         apiKey: effectiveApiKey,
         baseURL: effectiveBaseUrl,
+        headers: gatewayHeaders,
       };
 
       // For OpenAI-compatible providers (not native OpenAI), add a fetch
@@ -1245,6 +1300,7 @@ export function getModel(config: ModelConfig): ModelWithInfo {
       const anthropic = createAnthropic({
         apiKey: effectiveApiKey,
         baseURL: effectiveBaseUrl,
+        headers: gatewayHeaders,
       });
       model = anthropic.chat(config.modelId);
       break;
@@ -1254,6 +1310,7 @@ export function getModel(config: ModelConfig): ModelWithInfo {
       const googleOptions: Parameters<typeof createGoogleGenerativeAI>[0] = {
         apiKey: effectiveApiKey,
         baseURL: effectiveBaseUrl,
+        headers: gatewayHeaders,
       };
       if (config.proxy) {
         const proxy = config.proxy;
@@ -1278,6 +1335,16 @@ export function getModel(config: ModelConfig): ModelWithInfo {
       }
       const google = createGoogleGenerativeAI(googleOptions);
       model = google.chat(config.modelId);
+      break;
+    }
+
+    case 'mistral': {
+      const mistral = createMistral({
+        apiKey: effectiveApiKey,
+        baseURL: effectiveBaseUrl,
+        headers: gatewayHeaders,
+      });
+      model = mistral.chat(config.modelId);
       break;
     }
 

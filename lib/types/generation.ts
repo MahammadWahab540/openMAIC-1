@@ -48,6 +48,8 @@ export interface UploadedDocument {
  */
 export interface UserRequirements {
   requirement: string; // Single free-form text for all user input
+  context?: string; // Additional context for generation
+  targetSceneCount?: number; // Target number of scenes to generate
   userNickname?: string; // Student nickname for personalization
   userBio?: string; // Student background for personalization
   webSearch?: boolean; // Enable web search for richer context

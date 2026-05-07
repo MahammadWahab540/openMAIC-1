@@ -30,11 +30,14 @@ import {
 import type { UserRequirements } from '@/lib/types/generation';
 import type { Scene, Stage } from '@/lib/types/stage';
 import { AGENT_COLOR_PALETTE, AGENT_DEFAULT_AVATARS } from '@/lib/constants/agent-defaults';
+import { sendWebhook } from '@/lib/server/webhooks';
 
 const log = createLogger('Classroom');
 
 export interface GenerateClassroomInput {
   requirement: string;
+  context?: string;
+  targetSceneCount?: number;
   pdfContent?: { text: string; images: string[] };
   enableWebSearch?: boolean;
   webSearchProviderId?: WebSearchProviderId;
@@ -43,6 +46,38 @@ export interface GenerateClassroomInput {
   enableVideoGeneration?: boolean;
   enableTTS?: boolean;
   agentMode?: 'default' | 'generate';
+  embedded?: boolean;
+
+  // Lumina Hub Integration Fields
+  metadata?: {
+    org_id?: string;
+    user_id?: string;
+    request_id?: string;
+    callback_url?: string;
+  };
+  learner_profile?: {
+    pii?: {
+      full_name?: string;
+      current_role?: string;
+    };
+    attributes?: {
+      experience_level?: string;
+      learning_style?: string;
+      preferred_language?: string;
+      goals?: string[];
+      prior_knowledge_tags?: string[];
+    };
+  };
+  agents?: Array<{
+    id: string;
+    name: string;
+    role: string;
+    persona: string;
+    avatar?: string;
+    color?: string;
+    priority?: number;
+    allowedActions?: string[];
+  }>;
 }
 
 export type ClassroomGenerationStep =
@@ -175,6 +210,14 @@ export async function generateClassroom(
     scenesGenerated: 0,
   });
 
+  // Send initial webhook
+  if (input.metadata?.callback_url) {
+    sendWebhook(input.metadata.callback_url, 'generation.started', {
+      requestId: input.metadata.request_id,
+      requirement: input.requirement,
+    });
+  }
+
   const {
     model: languageModel,
     modelInfo,
@@ -222,8 +265,25 @@ export async function generateClassroom(
     return result.text;
   };
 
+  // Build a rich student profile summary for prompt injection
+  let learnerSummary = '';
+  if (input.learner_profile) {
+    const p = input.learner_profile;
+    learnerSummary = `
+STUDENT PROFILE:
+- Role: ${p.pii?.current_role || 'Learner'}
+- Level: ${p.attributes?.experience_level || 'General'}
+- Style: ${p.attributes?.learning_style || 'Default'}
+- Goals: ${(p.attributes?.goals || []).join(', ')}
+- Prior Knowledge: ${(p.attributes?.prior_knowledge_tags || []).join(', ')}
+`.trim();
+  }
+
   const requirements: UserRequirements = {
-    requirement,
+    requirement: input.context ? `${input.context}\n\nRequirement: ${input.requirement}` : input.requirement,
+    targetSceneCount: input.targetSceneCount,
+    userNickname: input.learner_profile?.pii?.full_name,
+    userBio: learnerSummary || undefined,
   };
   const pdfText = pdfContent?.text || undefined;
 
@@ -240,7 +300,7 @@ export async function generateClassroom(
     const webSearchConfig = resolveClassroomWebSearchConfig(input);
     if (webSearchConfig) {
       try {
-        const searchQuery = await buildSearchQuery(requirement, pdfText, searchQueryAiCall);
+        const searchQuery = await buildSearchQuery(requirements.requirement, pdfText, searchQueryAiCall);
 
         log.info('Running web search for classroom generation', {
           hasPdfContext: searchQuery.hasPdfContext,
@@ -267,24 +327,38 @@ export async function generateClassroom(
     }
   }
 
-  await options.onProgress?.({
-    step: 'generating_outlines',
-    progress: 15,
-    message: 'Generating scene outlines',
-    scenesGenerated: 0,
-  });
-
+  // Stage 1: Generate scene outlines
   const outlinesResult = await generateSceneOutlinesFromRequirements(
     requirements,
     pdfText,
-    undefined,
+    input.pdfContent?.images.map((img, i) => ({
+      id: `img_${i}`,
+      src: img,
+      pageNumber: 1,
+    })),
     aiCall,
-    undefined,
     {
+      onProgress: async (p) => {
+        const progress = {
+          step: 'generating_outlines' as const,
+          progress: 15 + Math.round(p.stageProgress * 0.15),
+          message: p.statusMessage,
+          scenesGenerated: 0,
+        };
+        await options.onProgress?.(progress);
+
+        if (input.metadata?.callback_url) {
+          sendWebhook(input.metadata.callback_url, 'generation.progress', {
+            requestId: input.metadata.request_id,
+            ...progress,
+          });
+        }
+      },
+    },
+    {
+      researchContext,
       imageGenerationEnabled: input.enableImageGeneration,
       videoGenerationEnabled: input.enableVideoGeneration,
-      researchContext,
-      // NO teacherContext — agents haven't been generated yet
     },
   );
 
@@ -304,13 +378,20 @@ export async function generateClassroom(
     totalScenes: outlines.length,
   });
 
-  // Resolve agents based on agentMode — now AFTER outlines so we can use languageDirective
-  let agents: AgentInfo[];
-  const agentMode = input.agentMode || 'default';
-  if (agentMode === 'generate') {
+  // Agents Stage: Generate profiles if not provided
+  let agents: AgentInfo[] = [];
+  if (input.agents && input.agents.length > 0) {
+    log.info(`Using ${input.agents.length} custom agents provided in input`);
+    agents = input.agents.map((a) => ({
+      id: a.id,
+      name: a.name,
+      role: a.role,
+      persona: a.persona,
+    }));
+  } else if (input.agentMode === 'generate') {
     log.info('Generating custom agent profiles via LLM...');
     try {
-      agents = await generateAgentProfiles(requirement, languageDirective, aiCall);
+      agents = await generateAgentProfiles(requirements.requirement, languageDirective, aiCall);
       log.info(`Generated ${agents.length} agent profiles`);
     } catch (e) {
       log.warn('Agent profile generation failed, falling back to defaults:', e);
@@ -387,13 +468,22 @@ export async function generateClassroom(
 
     generatedScenes += 1;
     const progressEnd = 30 + Math.floor(((index + 1) / Math.max(outlines.length, 1)) * 60);
-    await options.onProgress?.({
-      step: 'generating_scenes',
+    const progressUpdate = {
+      step: 'generating_scenes' as const,
       progress: Math.min(progressEnd, 90),
       message: `Generated ${generatedScenes}/${outlines.length} scenes`,
       scenesGenerated: generatedScenes,
       totalScenes: outlines.length,
-    });
+    };
+    
+    await options.onProgress?.(progressUpdate);
+
+    if (input.metadata?.callback_url) {
+      sendWebhook(input.metadata.callback_url, 'generation.progress', {
+        requestId: input.metadata.request_id,
+        ...progressUpdate,
+      });
+    }
   }
 
   const scenes = store.getState().scenes;
@@ -467,9 +557,14 @@ export async function generateClassroom(
     totalScenes: outlines.length,
   });
 
+  let url = persisted.url;
+  if (input.embedded === true) {
+    url += (url.includes('?') ? '&' : '?') + 'embedded=true';
+  }
+
   return {
     id: persisted.id,
-    url: persisted.url,
+    url,
     stage,
     scenes,
     scenesCount: scenes.length,

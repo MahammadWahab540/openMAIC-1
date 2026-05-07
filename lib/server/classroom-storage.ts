@@ -2,6 +2,8 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import type { NextRequest } from 'next/server';
 import type { Scene, Stage } from '@/lib/types/stage';
+import connectToDatabase from './mongodb';
+import Classroom from '@/models/Classroom';
 
 export const CLASSROOMS_DIR = path.join(process.cwd(), 'data', 'classrooms');
 export const CLASSROOM_JOBS_DIR = path.join(process.cwd(), 'data', 'classroom-jobs');
@@ -46,10 +48,30 @@ export function isValidClassroomId(id: string): boolean {
 }
 
 export async function readClassroom(id: string): Promise<PersistedClassroomData | null> {
+  try {
+    await connectToDatabase();
+    const classroom = await Classroom.findOne({ id }).lean();
+    if (classroom) {
+      return classroom as unknown as PersistedClassroomData;
+    }
+  } catch (error) {
+    console.error('Failed to read from MongoDB:', error);
+  }
+
+  // Fallback to file storage
   const filePath = path.join(CLASSROOMS_DIR, `${id}.json`);
   try {
     const content = await fs.readFile(filePath, 'utf-8');
-    return JSON.parse(content) as PersistedClassroomData;
+    const data = JSON.parse(content) as PersistedClassroomData;
+    
+    // Optionally migrate to MongoDB if found on file
+    try {
+      await Classroom.findOneAndUpdate({ id: data.id }, data, { upsert: true });
+    } catch (e) {
+      console.error('Migration failed for classroom', id, e);
+    }
+    
+    return data;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
       return null;
@@ -73,6 +95,16 @@ export async function persistClassroom(
     createdAt: new Date().toISOString(),
   };
 
+  // Persist to MongoDB
+  try {
+    await connectToDatabase();
+    await Classroom.findOneAndUpdate({ id: data.id }, classroomData, { upsert: true });
+  } catch (error) {
+    console.error('Failed to persist to MongoDB:', error);
+    // Continue to file storage as fallback
+  }
+
+  // Persist to file (backup)
   await ensureClassroomsDir();
   const filePath = path.join(CLASSROOMS_DIR, `${data.id}.json`);
   await writeJsonFileAtomic(filePath, classroomData);

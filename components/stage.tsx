@@ -43,9 +43,12 @@ import { VisuallyHidden } from 'radix-ui';
  */
 export function Stage({
   onRetryOutline,
+  isEmbedded = false,
 }: {
   onRetryOutline?: (outlineId: string) => Promise<void>;
+  isEmbedded?: boolean;
 }) {
+  console.log('[Stage] isEmbedded:', isEmbedded);
   const { t } = useI18n();
   const {
     mode,
@@ -974,6 +977,7 @@ export function Stage({
               currentScene?.title ||
               (isCourseComplete && isPendingScene ? t('stage.courseComplete') : '')
             }
+            isEmbedded={isEmbedded}
           />
         )}
 

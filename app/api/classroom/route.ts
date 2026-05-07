@@ -33,7 +33,13 @@ export async function POST(request: NextRequest) {
 
     const persisted = await persistClassroom({ id, stage: { ...stage, id }, scenes }, baseUrl);
 
-    return apiSuccess({ id: persisted.id, url: persisted.url }, 201);
+    // If embedded mode is requested, append the flag to the returned URL
+    let url = persisted.url;
+    if (body.embedded === true) {
+      url += (url.includes('?') ? '&' : '?') + 'embedded=true';
+    }
+
+    return apiSuccess({ id: persisted.id, url }, 201);
   } catch (error) {
     log.error(
       `Classroom storage failed [stageId=${stageId ?? 'unknown'}, scenes=${sceneCount ?? 0}]:`,

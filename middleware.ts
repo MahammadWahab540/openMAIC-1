@@ -54,16 +54,23 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Check cookie — validate HMAC signature, not just existence
-  const cookie = request.cookies.get('openmaic_access');
-  if (cookie?.value && (await verifyToken(cookie.value, accessCode))) {
-    return NextResponse.next();
-  }
-
   // API requests without valid cookie → 401
   if (pathname.startsWith('/api/')) {
+    // 1. Check for X-API-Key header (Gateway/LMS authentication)
+    const apiKey = request.headers.get('x-api-key');
+    const lmsSecret = process.env.LMS_SECRET;
+    if (apiKey && lmsSecret && apiKey === lmsSecret) {
+      return NextResponse.next();
+    }
+
+    // 2. Check cookie — validate HMAC signature
+    const cookie = request.cookies.get('openmaic_access');
+    if (cookie?.value && (await verifyToken(cookie.value, accessCode))) {
+      return NextResponse.next();
+    }
+
     return NextResponse.json(
-      { success: false, errorCode: 'INVALID_REQUEST', error: 'Access code required' },
+      { success: false, errorCode: 'INVALID_REQUEST', error: 'Access code or valid API key required' },
       { status: 401 },
     );
   }

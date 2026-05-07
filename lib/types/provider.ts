@@ -20,7 +20,8 @@ export type BuiltInProviderId =
   | 'grok'
   | 'tencent-hunyuan'
   | 'xiaomi'
-  | 'ollama';
+  | 'ollama'
+  | 'mistral';
 
 /**
  * Provider ID (built-in or custom)
@@ -31,7 +32,7 @@ export type ProviderId = BuiltInProviderId | `custom-${string}`;
 /**
  * Provider API types
  */
-export type ProviderType = 'openai' | 'anthropic' | 'google';
+export type ProviderType = 'openai' | 'anthropic' | 'google' | 'mistral' | 'grok';
 
 export type ThinkingControlType =
   | 'none'

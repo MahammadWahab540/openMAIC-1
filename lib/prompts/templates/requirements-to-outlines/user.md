@@ -44,6 +44,7 @@ Please automatically infer the following from user requirements:
 - Course topic and core content
 - Target audience and difficulty level
 - Course duration (default 15-30 minutes if not specified)
+- Scene count: {{targetSceneCount}}
 - Teaching style (formal/casual/interactive/academic)
 - Visual style (minimal/colorful/professional/playful)
 

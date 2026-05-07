@@ -100,6 +100,7 @@ export async function generateSceneOutlinesFromRequirements(
     imageEnabled,
     videoEnabled,
     mediaEnabled,
+    targetSceneCount: requirements.targetSceneCount || 'Based on inferred duration',
     researchContext: options?.researchContext || 'None',
     // Server-side generation populates this via options; client-side populates via formatTeacherPersonaForPrompt
     teacherContext: options?.teacherContext || '',

@@ -5,10 +5,11 @@ import { ThemeProvider } from '@/lib/hooks/use-theme';
 import { useStageStore } from '@/lib/store';
 import { loadImageMapping } from '@/lib/utils/image-storage';
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import { useSceneGenerator } from '@/lib/hooks/use-scene-generator';
 import { useMediaGenerationStore } from '@/lib/store/media-generation';
 import { useWhiteboardHistoryStore } from '@/lib/store/whiteboard-history';
+import { useUserProfileStore } from '@/lib/store/user-profile';
 import { createLogger } from '@/lib/logger';
 import { MediaStageProvider } from '@/lib/contexts/media-stage-context';
 import { generateMediaForOutlines } from '@/lib/media/media-orchestrator';
@@ -17,9 +18,20 @@ const log = createLogger('Classroom');
 
 export default function ClassroomDetailPage() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const classroomId = params?.id as string;
+  const isEmbedded = searchParams.get('embedded') === 'true';
+  const urlUserId = searchParams.get('userId');
 
   const { loadFromStorage } = useStageStore();
+  const { setUserId } = useUserProfileStore();
+
+  useEffect(() => {
+    if (urlUserId) {
+      setUserId(urlUserId);
+      log.info('UserId set from URL:', urlUserId);
+    }
+  }, [urlUserId, setUserId]);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -204,7 +216,7 @@ export default function ClassroomDetailPage() {
               </div>
             </div>
           ) : (
-            <Stage onRetryOutline={retrySingleOutline} />
+            <Stage onRetryOutline={retrySingleOutline} isEmbedded={isEmbedded} />
           )}
         </div>
       </MediaStageProvider>

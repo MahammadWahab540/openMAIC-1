@@ -1,9 +1,12 @@
 'use client';
 
 import { useEffect, useState, ReactNode } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { AccessCodeModal } from '@/components/access-code-modal';
 
 export function AccessCodeGuard({ children }: { children: ReactNode }) {
+  const searchParams = useSearchParams();
+  const isEmbedded = searchParams.get('embedded') === 'true';
   const [status, setStatus] = useState<{
     enabled: boolean;
     authenticated: boolean;
@@ -11,6 +14,12 @@ export function AccessCodeGuard({ children }: { children: ReactNode }) {
   }>({ enabled: false, authenticated: false, loading: true });
 
   useEffect(() => {
+    // Skip status check if embedded
+    if (isEmbedded) {
+      setStatus({ enabled: false, authenticated: true, loading: false });
+      return;
+    }
+
     let cancelled = false;
     fetch('/api/access-code/status')
       .then((res) => res.json())
@@ -32,9 +41,9 @@ export function AccessCodeGuard({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [isEmbedded]);
 
-  const needsAuth = !status.loading && status.enabled && !status.authenticated;
+  const needsAuth = !status.loading && status.enabled && !status.authenticated && !isEmbedded;
 
   return (
     <>

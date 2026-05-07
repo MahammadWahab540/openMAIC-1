@@ -1,10 +1,6 @@
-/**
- * User Profile Store
- * Persists avatar, nickname & bio to localStorage
- */
-
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { nanoid } from 'nanoid';
 
 /** Predefined avatar options */
 export const AVATAR_OPTIONS = [
@@ -18,10 +14,12 @@ export const AVATAR_OPTIONS = [
 ] as const;
 
 export interface UserProfileState {
+  userId: string;
   /** Local avatar path or data-URL (for custom uploads) */
   avatar: string;
   nickname: string;
   bio: string;
+  setUserId: (id: string) => void;
   setAvatar: (avatar: string) => void;
   setNickname: (nickname: string) => void;
   setBio: (bio: string) => void;
@@ -30,9 +28,11 @@ export interface UserProfileState {
 export const useUserProfileStore = create<UserProfileState>()(
   persist(
     (set) => ({
+      userId: nanoid(),
       avatar: AVATAR_OPTIONS[0],
       nickname: '',
       bio: '',
+      setUserId: (userId) => set({ userId }),
       setAvatar: (avatar) => set({ avatar }),
       setNickname: (nickname) => set({ nickname }),
       setBio: (bio) => set({ bio }),

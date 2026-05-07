@@ -14,27 +14,34 @@ export const maxDuration = 30;
 export async function POST(req: NextRequest) {
   let requirementSnippet: string | undefined;
   try {
-    const rawBody = (await req.json()) as Partial<GenerateClassroomInput>;
-    requirementSnippet = rawBody.requirement?.substring(0, 60);
+    const rawBody = (await req.json()) as any;
+
+    // Handle both flat and Lumina-style nested structure
     const body: GenerateClassroomInput = {
-      requirement: rawBody.requirement || '',
-      ...(rawBody.pdfContent ? { pdfContent: rawBody.pdfContent } : {}),
+      requirement: rawBody.generation_requirement?.requirement || rawBody.requirement || '',
+      context: rawBody.generation_requirement?.context || rawBody.context,
+      targetSceneCount: rawBody.generation_requirement?.targetSceneCount || rawBody.targetSceneCount,
+      embedded: rawBody.metadata?.embedded || rawBody.embedded,
+      pdfContent: rawBody.pdfContent,
+      enableWebSearch: rawBody.generation_requirement?.enableWebSearch ?? rawBody.enableWebSearch,
+      webSearchProviderId: rawBody.generation_requirement?.webSearchProviderId ?? rawBody.webSearchProviderId,
+      webSearchApiKey: rawBody.generation_requirement?.webSearchApiKey ?? rawBody.webSearchApiKey,
+      enableImageGeneration:
+        rawBody.generation_requirement?.enableImageGeneration ?? rawBody.enableImageGeneration,
+      enableVideoGeneration:
+        rawBody.generation_requirement?.enableVideoGeneration ?? rawBody.enableVideoGeneration,
+      enableTTS: rawBody.generation_requirement?.enableTTS ?? rawBody.enableTTS,
+      agentMode: rawBody.generation_requirement?.agentMode ?? rawBody.agentMode,
 
-      ...(rawBody.enableWebSearch != null ? { enableWebSearch: rawBody.enableWebSearch } : {}),
-      ...(rawBody.webSearchProviderId ? { webSearchProviderId: rawBody.webSearchProviderId } : {}),
-      ...(rawBody.webSearchApiKey ? { webSearchApiKey: rawBody.webSearchApiKey } : {}),
-      ...(rawBody.enableImageGeneration != null
-        ? { enableImageGeneration: rawBody.enableImageGeneration }
-        : {}),
-      ...(rawBody.enableVideoGeneration != null
-        ? { enableVideoGeneration: rawBody.enableVideoGeneration }
-        : {}),
-      ...(rawBody.enableTTS != null ? { enableTTS: rawBody.enableTTS } : {}),
-      ...(rawBody.agentMode ? { agentMode: rawBody.agentMode } : {}),
+      // Pass through new fields
+      metadata: rawBody.metadata,
+      learner_profile: rawBody.learner_profile,
+      agents: rawBody.agents,
     };
-    const { requirement } = body;
 
-    if (!requirement) {
+    requirementSnippet = body.requirement?.substring(0, 60);
+
+    if (!body.requirement) {
       return apiError('MISSING_REQUIRED_FIELD', 400, 'Missing required field: requirement');
     }
 
